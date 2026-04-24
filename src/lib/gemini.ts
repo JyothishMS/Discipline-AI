@@ -1,4 +1,9 @@
-const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
+
+function buildApiUrl(path: string): string {
+  if (!API_BASE) return path;
+  return `${API_BASE.replace(/\/$/, "")}${path}`;
+}
 
 const cache = new Map<string, { data: string; time: number; ttl: number }>();
 
@@ -46,7 +51,7 @@ export async function getFullAnalysis(userData: {
 
   try {
     // Call backend API instead of Gemini directly
-    const res = await fetch("http://localhost:5000/analyze", {
+    const res = await fetch(buildApiUrl("/api/analyze"), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -92,7 +97,7 @@ export async function analyzeNutrition(food: string): Promise<{
 
   try {
     // Call backend for nutrition analysis
-    const res = await fetch("http://localhost:5000/analyze", {
+    const res = await fetch(buildApiUrl("/api/analyze"), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -156,19 +161,18 @@ User: ${userMessage}
 Respond as Coach (brief, supportive, action-focused):`;
 
   try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-        }),
-      }
-    );
+    const res = await fetch(buildApiUrl("/api/coach"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt }),
+    });
+
+    if (!res.ok) {
+      throw new Error(`Backend error: ${res.status}`);
+    }
 
     const data = await res.json();
-    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "Keep pushing forward!";
+    const text = data?.text || "Keep pushing forward!";
 
     setCache(cacheKey, text, 300000); // 5 min cache
     return text;
@@ -197,19 +201,18 @@ BMI: ${bmi} (${category})
 Provide specific, actionable advice (diet & exercise). Be motivational but realistic.`;
 
   try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-        }),
-      }
-    );
+    const res = await fetch(buildApiUrl("/api/bmi-advice"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt }),
+    });
+
+    if (!res.ok) {
+      throw new Error(`Backend error: ${res.status}`);
+    }
 
     const data = await res.json();
-    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "Maintain consistency in your health routine.";
+    const text = data?.text || "Maintain consistency in your health routine.";
 
     setCache(cacheKey, text, 1800000); // 30 min cache
     return text;
@@ -248,36 +251,23 @@ Return ONLY JSON:
 Use standard formulas (TDEE, macro ratios). Be realistic.`;
 
   try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-        }),
-      }
-    );
+    const res = await fetch(buildApiUrl("/api/goals"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt }),
+    });
+
+    if (!res.ok) {
+      throw new Error(`Backend error: ${res.status}`);
+    }
 
     const data = await res.json();
-    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
-
-    try {
-      const result = JSON.parse(text);
-      setCache(cacheKey, JSON.stringify(result), 3600000); // 1 hour cache
-      return result;
-    } catch {
-      // Fallback defaults
-      const fallback = {
-        cal: 2000,
-        prot: 150,
-        carbs: 250,
-        fat: 65,
-        water: 10,
-      };
-      setCache(cacheKey, JSON.stringify(fallback), 3600000);
-      return fallback;
+    if (data?.result) {
+      setCache(cacheKey, JSON.stringify(data.result), 3600000);
+      return data.result;
     }
+
+    throw new Error("Invalid backend response");
   } catch (err) {
     console.error("Personalized goals error:", err);
     return {
@@ -330,42 +320,25 @@ RESPOND WITH VALID JSON ONLY.
 `;
 
   try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-        }),
-      }
-    );
+    const res = await fetch(buildApiUrl("/api/diet-plan"), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ prompt }),
+    });
 
     if (!res.ok) {
-      throw new Error(`API error: ${res.status}`);
+      throw new Error(`Backend error: ${res.status}`);
     }
 
-    const data_res = await res.json();
-    const text = data_res?.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
-
-    let parsed;
-
-    try {
-      parsed = JSON.parse(text);
-    } catch {
-      // Fallback with structured format
-      parsed = {
-        breakfast: "Oatmeal with berries and honey (~350 kcal)",
-        lunch: "Grilled chicken breast with rice and vegetables (~550 kcal)",
-        dinner: "Salmon with sweet potato and broccoli (~600 kcal)",
-        snacks: "Greek yogurt, almonds, and fruits (~300 kcal)"
-      };
+    const data = await res.json();
+    if (data?.result) {
+      setCache(cacheKey, JSON.stringify(data.result), 3600000);
+      return data.result;
     }
 
-    setCache(cacheKey, JSON.stringify(parsed), 3600000); // 1 hour cache
-    return parsed;
+    throw new Error("Invalid backend response");
   } catch (err) {
     console.error("Diet plan error:", err);
     return {

@@ -12,6 +12,14 @@ app.use(express.json());
 
 const API_KEY = process.env.GEMINI_API_KEY;
 
+function ensureApiKey(res) {
+  if (!API_KEY) {
+    res.status(500).json({ error: "GEMINI_API_KEY not configured" });
+    return false;
+  }
+  return true;
+}
+
 // Redis setup
 const redisClient = createClient({
   socket: {
@@ -129,8 +137,9 @@ app.post("/analyze-queue", async (req, res) => {
 });
 
 // AI Analysis endpoint with Redis caching
-app.post("/analyze", async (req, res) => {
+async function handleAnalyze(req, res) {
   try {
+    if (!ensureApiKey(res)) return;
     const userData = req.body;
 
     // Create cache key from user data
@@ -233,6 +242,133 @@ BE STRICT, MOTIVATIONAL, AND BRIEF. RESPOND WITH VALID JSON ONLY.
       next_action: "Log your next meal",
       meal_suggestion: "Balanced meal with protein, carbs, and vegetables",
     });
+  }
+}
+
+app.post("/analyze", handleAnalyze);
+app.post("/api/analyze", handleAnalyze);
+
+app.post("/api/coach", async (req, res) => {
+  try {
+    if (!ensureApiKey(res)) return;
+    const { prompt } = req.body;
+
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    res.json({ text });
+  } catch (err) {
+    console.error("❌ Coach AI ERROR:", err.message);
+    res.status(500).json({ error: "Coach AI failed" });
+  }
+});
+
+app.post("/api/bmi-advice", async (req, res) => {
+  try {
+    if (!ensureApiKey(res)) return;
+    const { prompt } = req.body;
+
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    res.json({ text });
+  } catch (err) {
+    console.error("❌ BMI AI ERROR:", err.message);
+    res.status(500).json({ error: "BMI AI failed" });
+  }
+});
+
+app.post("/api/goals", async (req, res) => {
+  try {
+    if (!ensureApiKey(res)) return;
+    const { prompt } = req.body;
+
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
+
+    let parsed;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      parsed = null;
+    }
+
+    res.json({ result: parsed });
+  } catch (err) {
+    console.error("❌ Goals AI ERROR:", err.message);
+    res.status(500).json({ error: "Goals AI failed" });
+  }
+});
+
+app.post("/api/diet-plan", async (req, res) => {
+  try {
+    if (!ensureApiKey(res)) return;
+    const { prompt } = req.body;
+
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
+
+    let parsed;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      parsed = null;
+    }
+
+    res.json({ result: parsed });
+  } catch (err) {
+    console.error("❌ Diet Plan AI ERROR:", err.message);
+    res.status(500).json({ error: "Diet plan AI failed" });
   }
 });
 
