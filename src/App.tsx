@@ -12,7 +12,18 @@ import { useAuth } from "./context/AuthContext";
 
 export default function App() {
   const [tab, setTab] = useState("dashboard");
-  const { user, logout } = useAuth();
+  const { user, isLoading, logout } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-cyan-50 via-emerald-50 to-teal-50 dark:from-slate-900 dark:via-cyan-900/20 dark:to-teal-900/20 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-cyan-200 border-t-cyan-600 rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600 dark:text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!user) {
     return <Login />;
